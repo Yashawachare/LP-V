@@ -1,0 +1,154 @@
+//Server.java ----------
+
+import java.io.*;
+import java.net.*;
+import java.time.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.time.format.DateTimeFormatter;
+
+public class Server {
+    static class ClientInfo {
+        Socket socket;
+        Duration offset;
+        ClientInfo(Socket s) { socket = s; }
+    }
+
+    static Map<String, ClientInfo> clients = new ConcurrentHashMap<>();
+    static DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+    public static void main(String[] args) throws Exception {
+        ServerSocket server = new ServerSocket(8080);
+        ExecutorService pool = Executors.newCachedThreadPool();
+
+        pool.execute(() -> {
+            while (true) {
+                try {
+                    Socket client = server.accept();
+                    String id = client.getInetAddress() + ":" + client.getPort();
+                    clients.put(id, new ClientInfo(client));
+                    System.out.println(id + " connected.");
+
+                    pool.execute(() -> handleClient(id, client));
+                } catch (Exception ignored) {}
+            }
+        });
+
+        pool.execute(() -> {
+            while (true) {
+                try {
+                    if (!clients.isEmpty()) {
+                        Duration avg = clients.values().stream()
+                            .map(c -> c.offset)
+                            .reduce(Duration.ZERO, Duration::plus)
+                            .dividedBy(clients.size());
+
+                        for (ClientInfo c : clients.values()) {
+                            String syncTime = LocalDateTime.now().plus(avg).format(formatter);
+                            c.socket.getOutputStream().write((syncTime + "\n").getBytes());
+                        }
+                    }
+                    Thread.sleep(5000);
+                } catch (Exception ignored) {}
+            }
+        });
+    }
+
+    static void handleClient(String id, Socket client) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(client.getInputStream()))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                LocalDateTime clientTime = LocalDateTime.parse(line, formatter);
+                Duration diff = Duration.between(clientTime, LocalDateTime.now());
+                clients.get(id).offset = diff;
+                System.out.println(id + " updated offset: " + diff.getSeconds() + "s");
+            }
+        } catch (Exception e) {
+            clients.remove(id);
+            System.out.println(id + " disconnected.");
+        }
+    }
+}
+
+//Client.java
+import java.io.*;
+import java.net.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.*;
+
+public class Client {
+    public static void main(String[] args) throws Exception {
+        Socket socket = new Socket("127.0.0.1", 8080);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+
+        pool.execute(() -> {
+            try (OutputStream os = socket.getOutputStream()) {
+                while (true) {
+                    String now = LocalDateTime.now().toString();
+                    os.write((now + "\n").getBytes());
+                    os.flush();
+                    System.out.println("Sent: " + now);
+                    Thread.sleep(5000);
+                }
+            } catch (Exception ignored) {}
+        });
+
+        pool.execute(() -> {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    System.out.println("Synchronized time: " + line);
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+}
+
+
+---------------------------------Output----------------------------------------
+Server ->
+
+PS C:\Users\Project Lab\Desktop\DS_Lab\Assignment4> javac *.java
+PS C:\Users\Project Lab\Desktop\DS_Lab\Assignment4> java Server
+/127.0.0.1:63515 connected.
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+/127.0.0.1:63515 updated offset: 0s
+
+----------------------------------------------------------------------------
+
+Client ->
+
+PS C:\Users\Project Lab\Desktop\DS_Lab\Assignment4> java Client
+Sent: 2025-04-26T14:55:15.054
+Synchronized time: 2025-04-26T14:55:17.344
+Sent: 2025-04-26T14:55:20.059
+Synchronized time: 2025-04-26T14:55:22.339
+Sent: 2025-04-26T14:55:25.062
+Synchronized time: 2025-04-26T14:55:27.349
+Sent: 2025-04-26T14:55:30.070
+Synchronized time: 2025-04-26T14:55:32.354
+Sent: 2025-04-26T14:55:35.076
+Synchronized time: 2025-04-26T14:55:37.368
+Sent: 2025-04-26T14:55:40.086
+Synchronized time: 2025-04-26T14:55:42.371
+Sent: 2025-04-26T14:55:45.102
+Synchronized time: 2025-04-26T14:55:47.379
+Sent: 2025-04-26T14:55:50.118
+Synchronized time: 2025-04-26T14:55:52.391
+Sent: 2025-04-26T14:55:55.133
+Synchronized time: 2025-04-26T14:55:57.395
+Sent: 2025-04-26T14:56:00.146
+Synchronized time: 2025-04-26T14:56:02.396
+Sent: 2025-04-26T14:56:05.161
+Synchronized time: 2025-04-26T14:56:07.413
+Sent: 2025-04-26T14:56:10.170
+Synchronized time: 2025-04-26T14:56:12.427
