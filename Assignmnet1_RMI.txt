@@ -59,3 +59,14 @@ public interface AddServerIntf extends Remote {
    double add(double var1, double var3) throws RemoteException;
 }
 
+
+->>Output
+PS C:\Users\Project Lab\Desktop\DS_Lab\Assignment1> javac *.java
+PS C:\Users\Project Lab\Desktop\DS_Lab\Assignment1> start rmiregistry
+PS C:\Users\Project Lab\Desktop\DS_Lab\Assignment1> java AddServer
+
+In another terminal
+PS C:\Users\Project Lab\Desktop\DS_Lab\Assignment1> java AddClient localhost 5 10
+The first number is: 5
+The second number is: 10
+The sum is: 15.0
